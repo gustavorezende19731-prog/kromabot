@@ -87,11 +87,12 @@ function Dashboard() {
     <div className="flex min-h-screen text-foreground">
       <aside className="glass sticky top-4 m-4 hidden h-[calc(100vh-2rem)] w-20 flex-col items-center gap-3 rounded-3xl py-6 md:flex">
         <div className="glass-primary mb-4 grid h-11 w-11 place-items-center rounded-2xl font-display text-lg font-bold">K</div>
-        {[LayoutGrid, Wallet, Receipt, Bell, Settings].map((I, i) => (
+        {[LayoutGrid, Wallet, Receipt, Bell].map((I, i) => (
           <button key={i} aria-label="menu" className={`grid h-11 w-11 place-items-center rounded-2xl ${i === 0 ? "glass-primary" : "glass-btn"}`}>
             <I className="h-5 w-5" />
           </button>
         ))}
+        <ColorSettings />
       </aside>
 
       <main className="flex-1 space-y-6 p-4 md:p-8">
@@ -193,6 +194,47 @@ function Dashboard() {
           </div>
         </section>
       </main>
+    </div>
+  );
+}
+
+const COLORS = [
+  { n: "Vermelho", h: 22 }, { n: "Laranja", h: 50 }, { n: "Âmbar", h: 80 }, { n: "Verde", h: 150 },
+  { n: "Ciano", h: 200 }, { n: "Azul", h: 255 }, { n: "Violeta", h: 300 }, { n: "Rosa", h: 350 },
+];
+
+function ColorSettings() {
+  const [open, setOpen] = useState(false);
+  const [hue, setHue] = useState(22);
+  useEffect(() => {
+    const saved = Number(localStorage.getItem("kroma-hue"));
+    if (saved) setHue(saved);
+  }, []);
+  useEffect(() => {
+    document.documentElement.style.setProperty("--hue", String(hue));
+    localStorage.setItem("kroma-hue", String(hue));
+  }, [hue]);
+  return (
+    <div className="relative">
+      <button aria-label="Configurações" onClick={() => setOpen(!open)}
+        className={`grid h-11 w-11 place-items-center rounded-2xl ${open ? "glass-primary" : "glass-btn"}`}>
+        <Settings className="h-5 w-5" />
+      </button>
+      {open && (
+        <div className="glass absolute bottom-0 left-16 z-50 w-64 rounded-3xl bg-popover/80 p-5">
+          <p className="font-display font-bold">Cor do app</p>
+          <p className="mb-4 text-xs text-muted-foreground">Escolha a cor de destaque</p>
+          <div className="grid grid-cols-4 gap-3">
+            {COLORS.map((c) => (
+              <button key={c.h} title={c.n} aria-label={c.n} onClick={() => setHue(c.h)}
+                style={{ background: `oklch(0.6 0.2 ${c.h})` }}
+                className={`h-11 w-11 rounded-2xl border border-border transition hover:scale-105 ${hue === c.h ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : ""}`} />
+            ))}
+          </div>
+          <input type="range" min={0} max={360} value={hue} onChange={(e) => setHue(Number(e.target.value))}
+            aria-label="Tom personalizado" className="mt-4 w-full accent-primary" />
+        </div>
+      )}
     </div>
   );
 }
