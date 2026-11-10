@@ -63,6 +63,7 @@ function Dashboard() {
     }
   }, []);
   const [form, setForm] = useState({ type: "receita" as Entry["type"], desc: "", value: "" });
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     try {
@@ -116,9 +117,11 @@ function Dashboard() {
   const add = (ev: React.FormEvent) => {
     ev.preventDefault();
     const v = parseFloat(form.value.replace(",", "."));
-    if (!form.desc.trim() || !v || v <= 0) return;
-    setEntries([{ id: crypto.randomUUID(), type: form.type, desc: form.desc.trim(), value: v, date: new Date().toISOString().slice(0, 10) }, ...entries]);
+    if (!form.desc.trim()) { setFormError("Informe uma descrição para o lançamento."); return; }
+    if (!Number.isFinite(v) || v <= 0) { setFormError("Informe um valor maior que zero."); return; }
+    setEntries((current) => [{ id: crypto.randomUUID(), type: form.type, desc: form.desc.trim(), value: v, date: new Date().toISOString().slice(0, 10) }, ...current]);
     setForm({ ...form, desc: "", value: "" });
+    setFormError("");
   };
 
   const hour = new Date().getHours();
@@ -148,7 +151,7 @@ function Dashboard() {
           ))}
         </nav>
         {tab === "carteira" && <WalletView entries={entries} />}
-        {tab === "lancamentos" && <EntriesView entries={entries} onRemove={(id) => setEntries(entries.filter((x) => x.id !== id))} />}
+        {tab === "lancamentos" && <EntriesView entries={entries} onRemove={(id) => setEntries((current) => current.filter((x) => x.id !== id))} onNew={() => setTab("dashboard")} />}
         {tab === "alertas" && <AlertsView entries={entries} />}
         {tab === "dashboard" && <>
         <header className="flex flex-wrap items-end justify-between gap-4">
@@ -215,11 +218,12 @@ function Dashboard() {
                   className={`flex-1 rounded-xl py-2 text-sm font-semibold capitalize ${form.type === t ? "glass-primary" : "hover:bg-accent"}`}>{t}</button>
               ))}
             </div>
-            <input value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} placeholder="Descrição"
+            <input required value={form.desc} onChange={(e) => { setForm({ ...form, desc: e.target.value }); setFormError(""); }} placeholder="Descrição"
               className="glass rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-            <input value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} placeholder="Valor (R$)" inputMode="decimal"
+            <input required value={form.value} onChange={(e) => { setForm({ ...form, value: e.target.value }); setFormError(""); }} placeholder="Valor (R$)" inputMode="decimal"
               className="glass rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-            <button className="glass-primary mt-auto flex items-center justify-center gap-2 rounded-2xl py-3 font-semibold">
+            {formError && <p role="alert" className="text-xs text-destructive">{formError}</p>}
+            <button type="submit" className="glass-primary mt-auto flex items-center justify-center gap-2 rounded-2xl py-3 font-semibold">
               <Plus className="h-4 w-4" /> Adicionar
             </button>
           </form>
@@ -241,7 +245,7 @@ function Dashboard() {
                 <span className={`font-semibold ${e.type === "receita" ? "text-success" : "text-destructive"}`}>
                   {e.type === "receita" ? "+" : "−"} {brl(e.value)}
                 </span>
-                <button aria-label="Remover" onClick={() => setEntries(entries.filter((x) => x.id !== e.id))} className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground">
+                <button type="button" aria-label={`Remover ${e.desc}`} title="Remover lançamento" onClick={() => { if (window.confirm(`Remover o lançamento "${e.desc}"?`)) setEntries((current) => current.filter((x) => x.id !== e.id)); }} className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -307,12 +311,34 @@ function WalletView({ entries }: { entries: Entry[] }) {
   );
 }
 
-function EntriesView({ entries, onRemove }: { entries: Entry[]; onRemove: (id: string) => void }) {
+function downloadEntriesCsv(items: Entry[]) {
+  const rows = [
+    ["Data", "Tipo", "Descrição", "Valor (BRL)"],
+    ...items.map((entry) => [entry.date, entry.type, entry.desc, entry.value.toFixed(2).replace(".", ",")]),
+  ];
+  const csv = "\uFEFF" + rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `kroma-lancamentos-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function EntriesView({ entries, onRemove, onNew }: { entries: Entry[]; onRemove: (id: string) => void; onNew: () => void }) {
   const [f, setF] = useState<"todos" | Entry["type"]>("todos");
   const list = entries.filter((e) => f === "todos" || e.type === f).sort((a, b) => b.date.localeCompare(a.date));
   return (
     <div className="space-y-6">
-      <PageHeader tag="LANÇAMENTOS" title="Lançamentos" sub="Todas as suas receitas e despesas." />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <PageHeader tag="LANÇAMENTOS" title="Lançamentos" sub="Todas as suas receitas e despesas." />
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => downloadEntriesCsv(list)} className="glass-btn rounded-xl px-4 py-2 text-sm font-semibold">Exportar CSV</button>
+          <button type="button" onClick={onNew} className="glass-primary flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold"><Plus className="h-4 w-4" /> Novo lançamento</button>
+        </div>
+      </div>
       <div className="glass inline-flex gap-1 rounded-2xl p-1.5">
         {(["todos", "receita", "despesa"] as const).map((t) => (
           <button key={t} onClick={() => setF(t)} className={`rounded-xl px-4 py-2 text-sm font-semibold capitalize ${f === t ? "glass-primary" : "hover:bg-accent"}`}>{t}</button>
@@ -330,7 +356,7 @@ function EntriesView({ entries, onRemove }: { entries: Entry[]; onRemove: (id: s
               <p className="font-mono text-xs text-muted-foreground">{e.date.split("-").reverse().join("/")}</p>
             </div>
             <span className={`font-semibold ${e.type === "receita" ? "text-success" : "text-destructive"}`}>{e.type === "receita" ? "+" : "−"} {brl(e.value)}</span>
-            <button aria-label="Remover" onClick={() => onRemove(e.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground"><Trash2 className="h-4 w-4" /></button>
+            <button type="button" aria-label={`Remover ${e.desc}`} title="Remover lançamento" onClick={() => { if (window.confirm(`Remover o lançamento "${e.desc}"?`)) onRemove(e.id); }} className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground"><Trash2 className="h-4 w-4" /></button>
           </div>
         ))}
       </section>
