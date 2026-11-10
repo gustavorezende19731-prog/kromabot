@@ -41,6 +41,7 @@ function Dashboard() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [range, setRange] = useState(30);
+  const [tab, setTab] = useState<TabId>("dashboard");
   const [profile, setProfile] = useState<Profile>({ name: "", nick: "", photo: "" });
   useEffect(() => {
     const raw = localStorage.getItem("kroma-profile");
@@ -90,17 +91,30 @@ function Dashboard() {
 
   return (
     <div className="flex min-h-screen text-foreground">
-      <aside className="glass sticky top-4 m-4 hidden h-[calc(100vh-2rem)] w-20 flex-col items-center gap-3 rounded-3xl py-6 md:flex">
+      <aside className="glass sticky top-4 z-40 m-4 hidden h-[calc(100vh-2rem)] w-20 flex-col items-center gap-3 rounded-3xl py-6 md:flex">
         <ProfileMenu profile={profile} setProfile={setProfile} />
-        {[LayoutGrid, Wallet, Receipt, Bell].map((I, i) => (
-          <button key={i} aria-label="menu" className={`grid h-11 w-11 place-items-center rounded-2xl ${i === 0 ? "glass-primary" : "glass-btn"}`}>
-            <I className="h-5 w-5" />
+        {TABS.map((t) => (
+          <button key={t.id} aria-label={t.label} title={t.label} onClick={() => setTab(t.id)}
+            className={`grid h-11 w-11 place-items-center rounded-2xl ${tab === t.id ? "glass-primary" : "glass-btn"}`}>
+            <t.icon className="h-5 w-5" />
           </button>
         ))}
         <ColorSettings />
       </aside>
 
-      <main className="flex-1 space-y-6 p-4 md:p-8">
+      <main className="relative z-0 flex-1 space-y-6 p-4 pb-28 md:p-8">
+        <nav className="glass fixed inset-x-4 bottom-4 z-40 flex justify-around rounded-3xl p-2 md:hidden">
+          {TABS.map((t) => (
+            <button key={t.id} aria-label={t.label} onClick={() => setTab(t.id)}
+              className={`grid h-11 w-11 place-items-center rounded-2xl ${tab === t.id ? "glass-primary" : ""}`}>
+              <t.icon className="h-5 w-5" />
+            </button>
+          ))}
+        </nav>
+        {tab === "carteira" && <WalletView entries={entries} />}
+        {tab === "lancamentos" && <EntriesView entries={entries} onRemove={(id) => setEntries(entries.filter((x) => x.id !== id))} />}
+        {tab === "alertas" && <AlertsView entries={entries} />}
+        {tab === "dashboard" && <>
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="font-mono text-xs tracking-[0.3em] text-primary">KROMA · DASHBOARD</p>
@@ -198,7 +212,120 @@ function Dashboard() {
             ))}
           </div>
         </section>
+        </>}
       </main>
+    </div>
+  );
+}
+
+type TabId = "dashboard" | "carteira" | "lancamentos" | "alertas";
+const TABS: { id: TabId; label: string; icon: typeof Wallet }[] = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
+  { id: "carteira", label: "Carteira", icon: Wallet },
+  { id: "lancamentos", label: "Lançamentos", icon: Receipt },
+  { id: "alertas", label: "Alertas", icon: Bell },
+];
+
+function PageHeader({ tag, title, sub }: { tag: string; title: string; sub: string }) {
+  return (
+    <header>
+      <p className="font-mono text-xs tracking-[0.3em] text-primary">KROMA · {tag}</p>
+      <h1 className="mt-2 font-display text-4xl font-bold md:text-5xl">{title}</h1>
+      <p className="mt-1 text-muted-foreground">{sub}</p>
+    </header>
+  );
+}
+
+const sum = (es: Entry[], t: Entry["type"]) => es.filter((e) => e.type === t).reduce((s, e) => s + e.value, 0);
+
+function WalletView({ entries }: { entries: Entry[] }) {
+  const months = new Map<string, Entry[]>();
+  entries.forEach((e) => { const k = e.date.slice(0, 7); months.set(k, [...(months.get(k) ?? []), e]); });
+  const rows = [...months.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  const rev = sum(entries, "receita"), exp = sum(entries, "despesa");
+  return (
+    <div className="space-y-6">
+      <PageHeader tag="CARTEIRA" title="Carteira" sub="Seu saldo acumulado e resultado mês a mês." />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat highlight icon={Wallet} label="Saldo total" value={brl(rev - exp)} sub="Receitas − despesas" />
+        <Stat icon={ArrowUpRight} label="Entradas" value={brl(rev)} sub="Desde o início" tone="text-success" />
+        <Stat icon={ArrowDownRight} label="Saídas" value={brl(exp)} sub="Desde o início" tone="text-destructive" />
+      </div>
+      <section className="glass rounded-3xl p-6">
+        <h2 className="mb-4 font-display text-xl font-bold">Por mês</h2>
+        <div className="space-y-2">
+          {rows.map(([m, es]) => {
+            const r = sum(es, "receita"), d = sum(es, "despesa");
+            return (
+              <div key={m} className="glass-btn grid grid-cols-4 items-center gap-2 rounded-2xl px-4 py-3 text-sm">
+                <span className="font-mono">{m.slice(5)}/{m.slice(0, 4)}</span>
+                <span className="text-success">{brl(r)}</span>
+                <span className="text-destructive">{brl(d)}</span>
+                <span className="text-right font-semibold">{brl(r - d)}</span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function EntriesView({ entries, onRemove }: { entries: Entry[]; onRemove: (id: string) => void }) {
+  const [f, setF] = useState<"todos" | Entry["type"]>("todos");
+  const list = entries.filter((e) => f === "todos" || e.type === f).sort((a, b) => b.date.localeCompare(a.date));
+  return (
+    <div className="space-y-6">
+      <PageHeader tag="LANÇAMENTOS" title="Lançamentos" sub="Todas as suas receitas e despesas." />
+      <div className="glass inline-flex gap-1 rounded-2xl p-1.5">
+        {(["todos", "receita", "despesa"] as const).map((t) => (
+          <button key={t} onClick={() => setF(t)} className={`rounded-xl px-4 py-2 text-sm font-semibold capitalize ${f === t ? "glass-primary" : "hover:bg-accent"}`}>{t}</button>
+        ))}
+      </div>
+      <section className="glass space-y-2 rounded-3xl p-6">
+        {list.length === 0 && <p className="text-sm text-muted-foreground">Nenhum lançamento.</p>}
+        {list.map((e) => (
+          <div key={e.id} className="glass-btn flex items-center gap-4 rounded-2xl px-4 py-3">
+            <div className={`glass grid h-10 w-10 place-items-center rounded-xl ${e.type === "receita" ? "text-success" : "text-destructive"}`}>
+              {e.type === "receita" ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold">{e.desc}</p>
+              <p className="font-mono text-xs text-muted-foreground">{e.date.split("-").reverse().join("/")}</p>
+            </div>
+            <span className={`font-semibold ${e.type === "receita" ? "text-success" : "text-destructive"}`}>{e.type === "receita" ? "+" : "−"} {brl(e.value)}</span>
+            <button aria-label="Remover" onClick={() => onRemove(e.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground"><Trash2 className="h-4 w-4" /></button>
+          </div>
+        ))}
+      </section>
+    </div>
+  );
+}
+
+function AlertsView({ entries }: { entries: Entry[] }) {
+  const min = new Date(); min.setDate(min.getDate() - 30);
+  const recent = entries.filter((e) => new Date(e.date) >= min);
+  const r = sum(recent, "receita"), d = sum(recent, "despesa");
+  const margin = r ? ((r - d) / r) * 100 : 0;
+  const biggest = [...recent].filter((e) => e.type === "despesa").sort((a, b) => b.value - a.value)[0];
+  const alerts = [
+    r - d < 0 ? { t: "Lucro negativo", m: `Nos últimos 30 dias você gastou ${brl(d - r)} a mais do que faturou.`, bad: true }
+      : { t: "Lucro positivo", m: `Você lucrou ${brl(r - d)} nos últimos 30 dias.`, bad: false },
+    { t: "Margem de lucro", m: `Sua margem está em ${margin.toFixed(1)}%${margin < 30 ? " — abaixo de 30%, vale revisar custos." : "."}`, bad: margin < 30 },
+    biggest && { t: "Maior despesa", m: `${biggest.desc}: ${brl(biggest.value)}.`, bad: false },
+    recent.length === 0 && { t: "Sem lançamentos", m: "Nenhum lançamento nos últimos 30 dias.", bad: true },
+  ].filter(Boolean) as { t: string; m: string; bad: boolean }[];
+  return (
+    <div className="space-y-6">
+      <PageHeader tag="ALERTAS" title="Alertas" sub="Avisos automáticos sobre suas finanças (últimos 30 dias)." />
+      <section className="glass space-y-2 rounded-3xl p-6">
+        {alerts.map((a) => (
+          <div key={a.t} className="glass-btn flex items-start gap-4 rounded-2xl px-4 py-3">
+            <div className={`glass grid h-10 w-10 shrink-0 place-items-center rounded-xl ${a.bad ? "text-destructive" : "text-success"}`}><Bell className="h-5 w-5" /></div>
+            <div><p className="font-semibold">{a.t}</p><p className="text-sm text-muted-foreground">{a.m}</p></div>
+          </div>
+        ))}
+      </section>
     </div>
   );
 }
