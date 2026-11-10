@@ -375,6 +375,7 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -383,8 +384,14 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
+      if (event === "PASSWORD_RECOVERY") {
+        setRecoveryMode(true);
+        setOpen(true);
+        setError("");
+        setNotice("Digite uma nova senha para sua conta.");
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -438,6 +445,26 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível autenticar.");
     } finally { setBusy(false); }
+  };
+
+  const updateRecoveredPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!supabase || password.length < 6) {
+      setError("A nova senha precisa ter pelo menos 6 caracteres.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw updateError;
+      setPassword("");
+      setRecoveryMode(false);
+      setNotice("Senha atualizada com sucesso!");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível atualizar a senha.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const recoverPassword = async () => {
@@ -516,6 +543,16 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
           </div>
           {!supabase ? (
             <p className="text-sm text-destructive">Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nas variáveis de ambiente para ativar o login.</p>
+          ) : recoveryMode ? (
+            <form onSubmit={updateRecoveredPassword} className="space-y-3">
+              <p className="text-xs text-muted-foreground">Crie uma nova senha para sua conta.</p>
+              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder="Nova senha (mínimo 6 caracteres)"
+                className="glass w-full rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              <button disabled={busy} className="glass-primary w-full rounded-2xl py-3 text-sm font-semibold disabled:opacity-50">
+                {busy ? "Atualizando..." : "Salvar nova senha"}
+              </button>
+            </form>
           ) : !user ? (
             <form onSubmit={authenticate} className="space-y-3">
               <p className="text-xs text-muted-foreground">{mode === "login" ? "Entre com seu e-mail e senha." : "Crie sua conta com e-mail e senha."}</p>
