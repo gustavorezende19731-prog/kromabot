@@ -149,6 +149,7 @@ function Dashboard() {
               <t.icon className="h-5 w-5" />
             </button>
           ))}
+          <ColorSettings />
         </nav>
         {tab === "carteira" && <WalletView entries={entries} />}
         {tab === "lancamentos" && <EntriesView entries={entries} onRemove={(id) => setEntries((current) => current.filter((x) => x.id !== id))} onNew={() => setTab("dashboard")} />}
@@ -636,8 +637,11 @@ function ColorSettings() {
   const [open, setOpen] = useState(false);
   const [hue, setHue] = useState(22);
   useEffect(() => {
-    const saved = Number(localStorage.getItem("kroma-hue"));
-    if (saved) setHue(saved);
+    const raw = localStorage.getItem("kroma-hue");
+    if (raw !== null) {
+      const saved = Number(raw);
+      if (Number.isFinite(saved) && saved >= 0 && saved <= 360) setHue(saved);
+    }
   }, []);
   useEffect(() => {
     document.documentElement.style.setProperty("--hue", String(hue));
@@ -650,9 +654,9 @@ function ColorSettings() {
         <Settings className="h-5 w-5" />
       </button>
       {open && (
-        <div className="glass absolute bottom-0 left-16 z-50 w-64 rounded-3xl bg-popover/80 p-5">
-          <p className="font-display font-bold">Cor do app</p>
-          <p className="mb-4 text-xs text-muted-foreground">Escolha a cor de destaque</p>
+        <div className="glass absolute bottom-16 right-0 z-50 w-64 rounded-3xl bg-popover/95 p-5 shadow-2xl md:bottom-0 md:left-16 md:right-auto">
+          <p className="font-display font-bold">Personalizar cores</p>
+          <p className="mb-4 text-xs text-muted-foreground">Mude a cor do site e de todo o dashboard</p>
           <div className="grid grid-cols-4 gap-3">
             {COLORS.map((c) => (
               <button key={c.h} title={c.n} aria-label={c.n} onClick={() => setHue(c.h)}
