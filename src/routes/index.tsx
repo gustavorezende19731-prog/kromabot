@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { supabase } from "../lib/supabase";
 import { useEffect, useMemo, useState } from "react";
 import {
   LayoutGrid, Wallet, TrendingUp, Receipt, Plus, Trash2, ArrowUpRight, ArrowDownRight, Percent, Bell, Settings,
@@ -335,7 +336,40 @@ type Profile = { name: string; nick: string; photo: string };
 function ProfileMenu({ profile, setProfile }: { profile: Profile; setProfile: (p: Profile) => void }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(profile);
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
   useEffect(() => setDraft(profile), [profile, open]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || !user) return;
+    let active = true;
+    supabase.from("profiles").select("name,nick,avatar_url").eq("id", user.id).maybeSingle()
+      .then(({ data, error: profileError }) => {
+        if (!active) return;
+        if (profileError) { setError(profileError.message); return; }
+        if (data) {
+          const next = { name: data.name ?? "", nick: data.nick ?? "", photo: data.avatar_url ?? "" };
+          setProfile(next);
+          setDraft(next);
+        }
+      });
+    return () => { active = false; };
+  }, [user, setProfile]);
+
   const initial = (profile.nick || profile.name || "K").charAt(0).toUpperCase();
   const onFile = (f?: File) => {
     if (!f) return;
@@ -346,17 +380,67 @@ function ProfileMenu({ profile, setProfile }: { profile: Profile; setProfile: (p
       const sz = Math.min(img.width, img.height);
       c.getContext("2d")!.drawImage(img, (img.width - sz) / 2, (img.height - sz) / 2, sz, sz, 0, 0, 256, 256);
       setDraft((d) => ({ ...d, photo: c.toDataURL("image/jpeg", 0.85) }));
+      URL.revokeObjectURL(img.src);
     };
     img.src = URL.createObjectURL(f);
   };
-  const save = () => {
-    setProfile(draft);
-    localStorage.setItem("kroma-profile", JSON.stringify(draft));
-    setOpen(false);
+
+  const authenticate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!supabase) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = mode === "signup"
+        ? await supabase.auth.signUp({ email: email.trim(), password })
+        : await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (result.error) throw result.error;
+      if (mode === "signup" && !result.data.session) {
+        setNotice("Cadastro criado! Confira seu e-mail para confirmar a conta e depois entre.");
+      } else {
+        setNotice(mode === "signup" ? "Conta criada com sucesso!" : "Login realizado!");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível autenticar.");
+    } finally { setBusy(false); }
   };
+
+  const save = async () => {
+    if (!supabase || !user) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      let photoUrl = draft.photo;
+      if (draft.photo.startsWith("data:")) {
+        const blob = await (await fetch(draft.photo)).blob();
+        const path = user.id + "/avatar.jpg";
+        const { error: uploadError } = await supabase.storage.from("avatars").upload(path, blob, {
+          contentType: "image/jpeg", upsert: true,
+        });
+        if (uploadError) throw uploadError;
+        photoUrl = supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+      }
+      const { error: saveError } = await supabase.from("profiles").upsert({
+        id: user.id, name: draft.name.trim(), nick: draft.nick.trim(), avatar_url: photoUrl, updated_at: new Date().toISOString(),
+      });
+      if (saveError) throw saveError;
+      const next = { ...draft, photo: photoUrl };
+      setDraft(next); setProfile(next); localStorage.setItem("kroma-profile", JSON.stringify(next));
+      setNotice("Perfil salvo na sua conta!");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível salvar o perfil.");
+    } finally { setBusy(false); }
+  };
+
+  const logout = async () => {
+    if (!supabase) return;
+    const { error: logoutError } = await supabase.auth.signOut();
+    if (logoutError) setError(logoutError.message);
+    else { setProfile({ name: "", nick: "", photo: "" }); setNotice("Você saiu da sua conta."); }
+  };
+
   const Avatar = ({ p, size }: { p: Profile; size: string }) =>
     p.photo ? <img src={p.photo} alt="Foto de perfil" className={`${size} rounded-2xl object-cover`} />
       : <span className={`glass-primary grid ${size} place-items-center rounded-2xl font-display text-lg font-bold`}>{(p.nick || p.name || "K").charAt(0).toUpperCase()}</span>;
+
   return (
     <div className="relative mb-4">
       <button aria-label="Meu perfil" title="Meu perfil" onClick={() => setOpen(!open)}
@@ -364,24 +448,48 @@ function ProfileMenu({ profile, setProfile }: { profile: Profile; setProfile: (p
         <Avatar p={profile} size="h-11 w-11" />
       </button>
       {open && (
-        <div className="glass absolute left-16 top-0 z-50 w-72 space-y-3 rounded-3xl bg-popover/80 p-5">
-          <p className="font-display font-bold">Meu perfil</p>
-          <label className="flex cursor-pointer items-center gap-3">
-            <Avatar p={draft} size="h-16 w-16" />
-            <span className="glass-btn rounded-xl px-3 py-2 text-sm font-semibold">Trocar foto</span>
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
-          </label>
-          {draft.photo && (
-            <button onClick={() => setDraft({ ...draft, photo: "" })} className="text-xs text-muted-foreground underline">Remover foto</button>
-          )}
-          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nome"
-            className="glass w-full rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-          <input value={draft.nick} onChange={(e) => setDraft({ ...draft, nick: e.target.value })} placeholder="Apelido"
-            className="glass w-full rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-          <div className="flex gap-2 pt-1">
-            <button onClick={() => setOpen(false)} className="glass-btn flex-1 rounded-2xl py-2.5 text-sm font-semibold">Cancelar</button>
-            <button onClick={save} className="glass-primary flex-1 rounded-2xl py-2.5 text-sm font-semibold">Salvar</button>
+        <div className="glass absolute left-16 top-0 z-50 w-80 max-w-[calc(100vw-6rem)] space-y-3 rounded-3xl bg-popover/95 p-5 shadow-xl">
+          <div className="flex items-center justify-between">
+            <p className="font-display font-bold">Meu perfil</p>
+            {user && <button onClick={logout} className="text-xs text-muted-foreground underline">Sair</button>}
           </div>
+          {!supabase ? (
+            <p className="text-sm text-destructive">Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nas variáveis de ambiente para ativar o login.</p>
+          ) : !user ? (
+            <form onSubmit={authenticate} className="space-y-3">
+              <p className="text-xs text-muted-foreground">{mode === "login" ? "Entre com seu e-mail e senha." : "Crie sua conta com e-mail e senha."}</p>
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail"
+                className="glass w-full rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha (mínimo 6 caracteres)"
+                className="glass w-full rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              <button disabled={busy} className="glass-primary w-full rounded-2xl py-3 text-sm font-semibold disabled:opacity-50">
+                {busy ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta"}
+              </button>
+              <button type="button" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); setNotice(""); }}
+                className="w-full text-xs text-muted-foreground underline">
+                {mode === "login" ? "Ainda não tenho conta — cadastrar" : "Já tenho conta — entrar"}
+              </button>
+            </form>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">Conectado como {user.email}</p>
+              <label className="flex cursor-pointer items-center gap-3">
+                <Avatar p={draft} size="h-16 w-16" />
+                <span className="glass-btn rounded-xl px-3 py-2 text-sm font-semibold">Trocar foto</span>
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+              </label>
+              {draft.photo && <button onClick={() => setDraft({ ...draft, photo: "" })} className="text-xs text-muted-foreground underline">Remover foto</button>}
+              <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nome"
+                className="glass w-full rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              <input value={draft.nick} onChange={(e) => setDraft({ ...draft, nick: e.target.value })} placeholder="Apelido"
+                className="glass w-full rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              <button disabled={busy} onClick={save} className="glass-primary w-full rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-50">
+                {busy ? "Salvando..." : "Salvar perfil"}
+              </button>
+            </>
+          )}
+          {notice && <p role="status" className="text-xs text-success">{notice}</p>}
+          {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
         </div>
       )}
       <span className="sr-only">{initial}</span>
