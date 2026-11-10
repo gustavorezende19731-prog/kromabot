@@ -104,7 +104,8 @@ function Dashboard() {
       </aside>
 
       <main className="relative z-0 flex-1 space-y-6 p-4 pb-28 md:p-8">
-        <nav className="glass fixed inset-x-4 bottom-4 z-40 flex justify-around rounded-3xl p-2 md:hidden">
+        <nav className="glass fixed inset-x-4 bottom-4 z-40 flex items-center justify-around rounded-3xl p-2 md:hidden">
+          <ProfileMenu profile={profile} setProfile={setProfile} mobile />
           {TABS.map((t) => (
             <button key={t.id} aria-label={t.label} onClick={() => setTab(t.id)}
               className={`grid h-11 w-11 place-items-center rounded-2xl ${tab === t.id ? "glass-primary" : ""}`}>
@@ -333,7 +334,7 @@ function AlertsView({ entries }: { entries: Entry[] }) {
 
 type Profile = { name: string; nick: string; photo: string };
 
-function ProfileMenu({ profile, setProfile }: { profile: Profile; setProfile: (p: Profile) => void }) {
+function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile; setProfile: (p: Profile) => void; mobile?: boolean }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(profile);
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
@@ -442,13 +443,13 @@ function ProfileMenu({ profile, setProfile }: { profile: Profile; setProfile: (p
       : <span className={`glass-primary grid ${size} place-items-center rounded-2xl font-display text-lg font-bold`}>{(p.nick || p.name || "K").charAt(0).toUpperCase()}</span>;
 
   return (
-    <div className="relative mb-4">
+    <div className={mobile ? "relative mb-0" : "relative mb-4"}>
       <button aria-label="Meu perfil" title="Meu perfil" onClick={() => setOpen(!open)}
         className="block rounded-2xl ring-offset-2 ring-offset-background transition hover:ring-2 hover:ring-primary">
         <Avatar p={profile} size="h-11 w-11" />
       </button>
       {open && (
-        <div className="glass absolute left-16 top-0 z-50 w-80 max-w-[calc(100vw-6rem)] space-y-3 rounded-3xl bg-popover/95 p-5 shadow-xl">
+        <div className={`glass absolute z-50 w-80 space-y-3 rounded-3xl bg-popover/95 p-5 shadow-xl ${mobile ? "bottom-16 right-0 max-w-[calc(100vw-2rem)]" : "left-16 top-0 max-w-[calc(100vw-6rem)]"}`}>
           <div className="flex items-center justify-between">
             <p className="font-display font-bold">Meu perfil</p>
             {user && <button onClick={logout} className="text-xs text-muted-foreground underline">Sair</button>}
