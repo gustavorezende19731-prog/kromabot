@@ -45,15 +45,49 @@ function Dashboard() {
   const [tab, setTab] = useState<TabId>("dashboard");
   const [profile, setProfile] = useState<Profile>({ name: "", nick: "", photo: "" });
   useEffect(() => {
-    const raw = localStorage.getItem("kroma-profile");
-    if (raw) setProfile(JSON.parse(raw));
+    try {
+      const raw = localStorage.getItem("kroma-profile");
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        const value = parsed as Partial<Profile>;
+        setProfile({
+          name: typeof value.name === "string" ? value.name : "",
+          nick: typeof value.nick === "string" ? value.nick : "",
+          photo: typeof value.photo === "string" ? value.photo : "",
+        });
+      }
+    } catch (error) {
+      console.warn("Não foi possível carregar o perfil salvo; usando perfil vazio.", error);
+      localStorage.removeItem("kroma-profile");
+    }
   }, []);
   const [form, setForm] = useState({ type: "receita" as Entry["type"], desc: "", value: "" });
 
   useEffect(() => {
-    const raw = localStorage.getItem(KEY);
-    setEntries(raw ? JSON.parse(raw) : seed());
-    setLoaded(true);
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) {
+        setEntries(seed());
+      } else {
+        const parsed: unknown = JSON.parse(raw);
+        const valid = Array.isArray(parsed) && parsed.every((entry) =>
+          entry && typeof entry === "object" &&
+          typeof entry.id === "string" &&
+          (entry.type === "receita" || entry.type === "despesa") &&
+          typeof entry.desc === "string" &&
+          typeof entry.value === "number" && Number.isFinite(entry.value) &&
+          typeof entry.date === "string"
+        );
+        setEntries(valid ? parsed as Entry[] : seed());
+      }
+    } catch (error) {
+      console.warn("Não foi possível carregar os lançamentos salvos; restaurando dados iniciais.", error);
+      setEntries(seed());
+      localStorage.removeItem(KEY);
+    } finally {
+      setLoaded(true);
+    }
   }, []);
   useEffect(() => { if (loaded) localStorage.setItem(KEY, JSON.stringify(entries)); }, [entries, loaded]);
 
