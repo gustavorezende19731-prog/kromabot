@@ -6,6 +6,9 @@ on:
     paths:
       - "package.json"
       - "src/**"
+      - "server.ts"
+      - "error-capture.ts"
+      - "error-page.ts"
       - ".env"
       - ".github/workflows/validate.yml"
   workflow_dispatch:
