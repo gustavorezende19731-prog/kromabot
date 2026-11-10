@@ -41,6 +41,11 @@ function Dashboard() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [range, setRange] = useState(30);
+  const [profile, setProfile] = useState<Profile>({ name: "", nick: "", photo: "" });
+  useEffect(() => {
+    const raw = localStorage.getItem("kroma-profile");
+    if (raw) setProfile(JSON.parse(raw));
+  }, []);
   const [form, setForm] = useState({ type: "receita" as Entry["type"], desc: "", value: "" });
 
   useEffect(() => {
@@ -86,7 +91,7 @@ function Dashboard() {
   return (
     <div className="flex min-h-screen text-foreground">
       <aside className="glass sticky top-4 m-4 hidden h-[calc(100vh-2rem)] w-20 flex-col items-center gap-3 rounded-3xl py-6 md:flex">
-        <div className="glass-primary mb-4 grid h-11 w-11 place-items-center rounded-2xl font-display text-lg font-bold">K</div>
+        <ProfileMenu profile={profile} setProfile={setProfile} />
         {[LayoutGrid, Wallet, Receipt, Bell].map((I, i) => (
           <button key={i} aria-label="menu" className={`grid h-11 w-11 place-items-center rounded-2xl ${i === 0 ? "glass-primary" : "glass-btn"}`}>
             <I className="h-5 w-5" />
@@ -99,7 +104,7 @@ function Dashboard() {
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="font-mono text-xs tracking-[0.3em] text-primary">KROMA · DASHBOARD</p>
-            <h1 className="mt-2 font-display text-4xl font-bold md:text-5xl">{greet}.</h1>
+            <h1 className="mt-2 font-display text-4xl font-bold md:text-5xl">{greet}{profile.nick || profile.name ? `, ${profile.nick || profile.name}` : ""}.</h1>
             <p className="mt-1 text-muted-foreground">Seu faturamento e lucro em um só lugar.</p>
           </div>
           <div className="glass flex gap-1 rounded-2xl p-1.5">
@@ -194,6 +199,65 @@ function Dashboard() {
           </div>
         </section>
       </main>
+    </div>
+  );
+}
+
+type Profile = { name: string; nick: string; photo: string };
+
+function ProfileMenu({ profile, setProfile }: { profile: Profile; setProfile: (p: Profile) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(profile);
+  useEffect(() => setDraft(profile), [profile, open]);
+  const initial = (profile.nick || profile.name || "K").charAt(0).toUpperCase();
+  const onFile = (f?: File) => {
+    if (!f) return;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 256;
+      const sz = Math.min(img.width, img.height);
+      c.getContext("2d")!.drawImage(img, (img.width - sz) / 2, (img.height - sz) / 2, sz, sz, 0, 0, 256, 256);
+      setDraft((d) => ({ ...d, photo: c.toDataURL("image/jpeg", 0.85) }));
+    };
+    img.src = URL.createObjectURL(f);
+  };
+  const save = () => {
+    setProfile(draft);
+    localStorage.setItem("kroma-profile", JSON.stringify(draft));
+    setOpen(false);
+  };
+  const Avatar = ({ p, size }: { p: Profile; size: string }) =>
+    p.photo ? <img src={p.photo} alt="Foto de perfil" className={`${size} rounded-2xl object-cover`} />
+      : <span className={`glass-primary grid ${size} place-items-center rounded-2xl font-display text-lg font-bold`}>{(p.nick || p.name || "K").charAt(0).toUpperCase()}</span>;
+  return (
+    <div className="relative mb-4">
+      <button aria-label="Meu perfil" title="Meu perfil" onClick={() => setOpen(!open)}
+        className="block rounded-2xl ring-offset-2 ring-offset-background transition hover:ring-2 hover:ring-primary">
+        <Avatar p={profile} size="h-11 w-11" />
+      </button>
+      {open && (
+        <div className="glass absolute left-16 top-0 z-50 w-72 space-y-3 rounded-3xl bg-popover/80 p-5">
+          <p className="font-display font-bold">Meu perfil</p>
+          <label className="flex cursor-pointer items-center gap-3">
+            <Avatar p={draft} size="h-16 w-16" />
+            <span className="glass-btn rounded-xl px-3 py-2 text-sm font-semibold">Trocar foto</span>
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+          </label>
+          {draft.photo && (
+            <button onClick={() => setDraft({ ...draft, photo: "" })} className="text-xs text-muted-foreground underline">Remover foto</button>
+          )}
+          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nome"
+            className="glass w-full rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+          <input value={draft.nick} onChange={(e) => setDraft({ ...draft, nick: e.target.value })} placeholder="Apelido"
+            className="glass w-full rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => setOpen(false)} className="glass-btn flex-1 rounded-2xl py-2.5 text-sm font-semibold">Cancelar</button>
+            <button onClick={save} className="glass-primary flex-1 rounded-2xl py-2.5 text-sm font-semibold">Salvar</button>
+          </div>
+        </div>
+      )}
+      <span className="sr-only">{initial}</span>
     </div>
   );
 }
