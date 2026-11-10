@@ -43,5 +43,13 @@ jobs:
             git push
           fi
 
+      - name: Type-check application
+        run: bunx tsc --noEmit
+
+      - name: Verify Supabase build configuration
+        run: |
+          test -n "$VITE_SUPABASE_URL" || grep -q '^VITE_SUPABASE_URL=https://' .env
+          test -n "$VITE_SUPABASE_ANON_KEY" || grep -q '^VITE_SUPABASE_ANON_KEY=sb_publishable_' .env
+
       - name: Build application
         run: bun run build
