@@ -433,10 +433,31 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
         setNotice("Cadastro criado! Confira seu e-mail para confirmar a conta e depois entre.");
       } else {
         setNotice(mode === "signup" ? "Conta criada com sucesso!" : "Login realizado!");
+        setOpen(false);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível autenticar.");
     } finally { setBusy(false); }
+  };
+
+  const recoverPassword = async () => {
+    if (!supabase) return;
+    if (!email.trim()) {
+      setError("Digite seu e-mail para receber o link de recuperação.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin,
+      });
+      if (recoveryError) throw recoveryError;
+      setNotice("Se esse e-mail estiver cadastrado, você receberá um link para redefinir a senha.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível enviar o link de recuperação.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const save = async () => {
@@ -505,8 +526,14 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
               <button disabled={busy} className="glass-primary w-full rounded-2xl py-3 text-sm font-semibold disabled:opacity-50">
                 {busy ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta"}
               </button>
-              <button type="button" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); setNotice(""); }}
-                className="w-full text-xs text-muted-foreground underline">
+              {mode === "login" && (
+                <button type="button" disabled={busy} onClick={recoverPassword}
+                  className="w-full text-xs text-muted-foreground underline disabled:opacity-50">
+                  Esqueci minha senha
+                </button>
+              )}
+              <button type="button" disabled={busy} onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); setNotice(""); }}
+                className="w-full text-xs text-muted-foreground underline disabled:opacity-50">
                 {mode === "login" ? "Ainda não tenho conta — cadastrar" : "Já tenho conta — entrar"}
               </button>
             </form>
