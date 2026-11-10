@@ -435,7 +435,12 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
     if (!supabase) return;
     const { error: logoutError } = await supabase.auth.signOut();
     if (logoutError) setError(logoutError.message);
-    else { setProfile({ name: "", nick: "", photo: "" }); setNotice("Você saiu da sua conta."); }
+    else {
+      setProfile({ name: "", nick: "", photo: "" });
+      setDraft({ name: "", nick: "", photo: "" });
+      localStorage.removeItem("kroma-profile");
+      setNotice("Você saiu da sua conta.");
+    }
   };
 
   const Avatar = ({ p, size }: { p: Profile; size: string }) =>
