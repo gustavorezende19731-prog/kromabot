@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabase } from "../lib/supabase";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   LayoutGrid, Wallet, TrendingUp, Receipt, Plus, Trash2, ArrowUpRight, ArrowDownRight, Percent, Bell, Settings,
 } from "lucide-react";
@@ -515,7 +516,11 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
   };
 
   const save = async () => {
-    if (!supabase || !user) return;
+    if (!supabase || !user) {
+      setProfile(draft); localStorage.setItem("kroma-profile", JSON.stringify(draft));
+      setNotice("Perfil salvo neste aparelho. Entre na sua conta para guardar na nuvem.");
+      return;
+    }
     setBusy(true); setError(""); setNotice("");
     try {
       let photoUrl = draft.photo;
@@ -562,15 +567,15 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
         className="block rounded-2xl ring-offset-2 ring-offset-background transition hover:ring-2 hover:ring-primary">
         <Avatar p={profile} size="h-11 w-11" />
       </button>
-      {open && (
-        <div className={`glass absolute z-50 w-80 space-y-3 rounded-3xl bg-popover/95 p-5 shadow-xl ${mobile ? "bottom-16 right-0 max-w-[calc(100vw-2rem)]" : "left-16 top-0 max-w-[calc(100vw-6rem)]"}`}>
+      {open && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-background/70 p-4 backdrop-blur-sm" onClick={() => setOpen(false)}>
+        <div role="dialog" aria-label="Meu perfil" onClick={(e) => e.stopPropagation()} className="glass max-h-[90vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-3xl bg-popover p-5 shadow-2xl">
           <div className="flex items-center justify-between">
             <p className="font-display font-bold">Meu perfil</p>
-            {user && <button onClick={logout} className="text-xs text-muted-foreground underline">Sair</button>}
+            <div className="flex gap-3">{user && <button onClick={logout} className="text-xs text-muted-foreground underline">Sair</button>}<button onClick={() => setOpen(false)} aria-label="Fechar" className="text-xs text-muted-foreground underline">Fechar</button></div>
           </div>
-          {!supabase ? (
-            <p className="text-sm text-destructive">Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nas variáveis de ambiente para ativar o login.</p>
-          ) : recoveryMode ? (
+          {user && <p className="text-xs text-muted-foreground">Conectado como {user.email}</p>}
+          {recoveryMode && supabase ? (
             <form onSubmit={updateRecoveredPassword} className="space-y-3">
               <p className="text-xs text-muted-foreground">Crie uma nova senha para sua conta.</p>
               <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
@@ -580,7 +585,27 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
                 {busy ? "Atualizando..." : "Salvar nova senha"}
               </button>
             </form>
-          ) : !user ? (
+          ) : (
+            <>
+              <label className="flex cursor-pointer items-center gap-3">
+                <Avatar p={draft} size="h-16 w-16" />
+                <span className="glass-btn rounded-xl px-3 py-2 text-sm font-semibold">Trocar foto</span>
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+              </label>
+              {draft.photo && <button onClick={() => setDraft({ ...draft, photo: "" })} className="text-xs text-muted-foreground underline">Remover foto</button>}
+              <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nome"
+                className="glass w-full rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              <input value={draft.nick} onChange={(e) => setDraft({ ...draft, nick: e.target.value })} placeholder="Apelido"
+                className="glass w-full rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              <button disabled={busy} onClick={save} className="glass-primary w-full rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-50">
+                {busy ? "Salvando..." : user ? "Salvar na minha conta" : "Salvar perfil"}
+              </button>
+            </>
+          )}
+          {!user && !recoveryMode && (
+            <div className="space-y-3 border-t border-border pt-4">
+              <p className="font-display text-sm font-bold">Entrar para salvar na nuvem</p>
+              {!supabase ? <p className="text-xs text-destructive">Login indisponível no momento.</p> : (
             <form onSubmit={authenticate} className="space-y-3">
               <p className="text-xs text-muted-foreground">{mode === "login" ? "Entre com seu e-mail e senha." : "Crie sua conta com e-mail e senha."}</p>
               <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail"
@@ -601,27 +626,14 @@ function ProfileMenu({ profile, setProfile, mobile = false }: { profile: Profile
                 {mode === "login" ? "Ainda não tenho conta — cadastrar" : "Já tenho conta — entrar"}
               </button>
             </form>
-          ) : (
-            <>
-              <p className="text-xs text-muted-foreground">Conectado como {user.email}</p>
-              <label className="flex cursor-pointer items-center gap-3">
-                <Avatar p={draft} size="h-16 w-16" />
-                <span className="glass-btn rounded-xl px-3 py-2 text-sm font-semibold">Trocar foto</span>
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
-              </label>
-              {draft.photo && <button onClick={() => setDraft({ ...draft, photo: "" })} className="text-xs text-muted-foreground underline">Remover foto</button>}
-              <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nome"
-                className="glass w-full rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-              <input value={draft.nick} onChange={(e) => setDraft({ ...draft, nick: e.target.value })} placeholder="Apelido"
-                className="glass w-full rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-              <button disabled={busy} onClick={save} className="glass-primary w-full rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-50">
-                {busy ? "Salvando..." : "Salvar perfil"}
-              </button>
-            </>
+              )}
+            </div>
           )}
           {notice && <p role="status" className="text-xs text-success">{notice}</p>}
           {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
         </div>
+        </div>,
+        document.body,
       )}
       <span className="sr-only">{initial}</span>
     </div>
@@ -654,7 +666,7 @@ function ColorSettings() {
         <Settings className="h-5 w-5" />
       </button>
       {open && (
-        <div className="glass absolute bottom-16 right-0 z-50 w-64 rounded-3xl bg-popover/95 p-5 shadow-2xl md:bottom-0 md:left-16 md:right-auto">
+        <div className="glass absolute bottom-16 right-0 z-[100] w-64 rounded-3xl bg-popover p-5 shadow-2xl md:bottom-0 md:left-16 md:right-auto">
           <p className="font-display font-bold">Personalizar cores</p>
           <p className="mb-4 text-xs text-muted-foreground">Mude a cor do site e de todo o dashboard</p>
           <div className="grid grid-cols-4 gap-3">
