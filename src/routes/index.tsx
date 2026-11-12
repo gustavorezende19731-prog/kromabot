@@ -1,3 +1,4 @@
+import { CofreView } from "@/components/cofre-view";
 import { createFileRoute } from "@tanstack/react-router";
 import { supabase } from "../lib/supabase";
 import { useEffect, useMemo, useState } from "react";
@@ -23,7 +24,6 @@ export const Route = createFileRoute("/")({
 
 type Entry = { id: string; type: "receita" | "despesa"; desc: string; value: number; date: string };
 const KEY = "kroma-entries";
-const COFRE_URL = "https://seucofrepessoal.lovable.app";
 const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 function seed(): Entry[] {
@@ -139,10 +139,6 @@ function Dashboard() {
             <t.icon className="h-5 w-5" />
           </button>
         ))}
-        <a href={COFRE_URL} target="_blank" rel="noopener noreferrer" aria-label="Cofre — compras e assinaturas" title="Cofre — compras e assinaturas"
-          className="glass-btn grid h-11 w-11 place-items-center rounded-2xl">
-          <Vault className="h-5 w-5" />
-        </a>
         <ColorSettings />
       </aside>
 
@@ -155,15 +151,12 @@ function Dashboard() {
               <t.icon className="h-5 w-5" />
             </button>
           ))}
-          <a href={COFRE_URL} target="_blank" rel="noopener noreferrer" aria-label="Cofre — compras e assinaturas" title="Cofre — compras e assinaturas"
-            className="grid h-11 w-11 place-items-center rounded-2xl">
-            <Vault className="h-5 w-5" />
-          </a>
           <ColorSettings />
         </nav>
         {tab === "carteira" && <WalletView entries={entries} />}
         {tab === "lancamentos" && <EntriesView entries={entries} onRemove={(id) => setEntries((current) => current.filter((x) => x.id !== id))} onNew={() => setTab("dashboard")} />}
         {tab === "alertas" && <AlertsView entries={entries} />}
+        {tab === "cofre" && <CofreView />}
         {tab === "dashboard" && <>
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -269,12 +262,13 @@ function Dashboard() {
   );
 }
 
-type TabId = "dashboard" | "carteira" | "lancamentos" | "alertas";
+type TabId = "dashboard" | "carteira" | "lancamentos" | "alertas" | "cofre";
 const TABS: { id: TabId; label: string; icon: typeof Wallet }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
   { id: "carteira", label: "Carteira", icon: Wallet },
   { id: "lancamentos", label: "Lançamentos", icon: Receipt },
   { id: "alertas", label: "Alertas", icon: Bell },
+  { id: "cofre", label: "Cofre — compras e assinaturas", icon: Vault },
 ];
 
 function PageHeader({ tag, title, sub }: { tag: string; title: string; sub: string }) {
