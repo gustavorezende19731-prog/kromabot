@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  LayoutGrid, Wallet, TrendingUp, Receipt, Plus, Trash2, ArrowUpRight, ArrowDownRight, Percent, Bell, Settings,
+  LayoutGrid, Wallet, TrendingUp, Receipt, Plus, Trash2, ArrowUpRight, ArrowDownRight, Percent, Bell, Settings, Vault,
 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -23,6 +23,7 @@ export const Route = createFileRoute("/")({
 
 type Entry = { id: string; type: "receita" | "despesa"; desc: string; value: number; date: string };
 const KEY = "kroma-entries";
+const COFRE_URL = "https://seucofrepessoal.lovable.app";
 const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 function seed(): Entry[] {
@@ -138,6 +139,10 @@ function Dashboard() {
             <t.icon className="h-5 w-5" />
           </button>
         ))}
+        <a href={COFRE_URL} target="_blank" rel="noopener noreferrer" aria-label="Cofre — compras e assinaturas" title="Cofre — compras e assinaturas"
+          className="glass-btn grid h-11 w-11 place-items-center rounded-2xl">
+          <Vault className="h-5 w-5" />
+        </a>
         <ColorSettings />
       </aside>
 
@@ -150,6 +155,10 @@ function Dashboard() {
               <t.icon className="h-5 w-5" />
             </button>
           ))}
+          <a href={COFRE_URL} target="_blank" rel="noopener noreferrer" aria-label="Cofre — compras e assinaturas" title="Cofre — compras e assinaturas"
+            className="grid h-11 w-11 place-items-center rounded-2xl">
+            <Vault className="h-5 w-5" />
+          </a>
           <ColorSettings />
         </nav>
         {tab === "carteira" && <WalletView entries={entries} />}
